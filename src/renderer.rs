@@ -3,8 +3,7 @@ use std::sync::Arc;
 
 use vulkano::command_buffer::allocator::StandardCommandBufferAllocator;
 use vulkano::command_buffer::{
-    AutoCommandBufferBuilder, CommandBufferUsage, PrimaryAutoCommandBuffer, RenderPassBeginInfo,
-    SubpassBeginInfo, SubpassContents,
+    AutoCommandBufferBuilder, CommandBufferUsage, CopyImageInfo,
 };
 use vulkano::descriptor_set::layout::DescriptorType;
 use vulkano::device::physical::{PhysicalDevice, PhysicalDeviceType};
@@ -13,25 +12,21 @@ use vulkano::device::{
 };
 use vulkano::format::{Format, FormatFeatures};
 use vulkano::image::view::ImageView;
-use vulkano::image::{Image, ImageTiling, ImageUsage};
+use vulkano::image::{Image, ImageCreateInfo, ImageLayout, ImageTiling, ImageType, ImageUsage, SampleCount};
 use vulkano::instance::{Instance, InstanceCreateFlags, InstanceCreateInfo};
+use vulkano::memory::allocator::{AllocationCreateInfo, MemoryTypeFilter, StandardMemoryAllocator};
 use vulkano::pipeline::layout::{PipelineDescriptorSetLayoutCreateInfo, PipelineLayoutCreateFlags};
 use vulkano::pipeline::{Pipeline, PipelineLayout, PipelineShaderStageCreateInfo, ComputePipeline};
 use vulkano::pipeline::compute::ComputePipelineCreateInfo;
 use vulkano::descriptor_set::allocator::StandardDescriptorSetAllocator;
-use vulkano::descriptor_set::{self, DescriptorSet, WriteDescriptorSet};
+use vulkano::descriptor_set::{DescriptorSet, WriteDescriptorSet};
 use vulkano::descriptor_set::layout::{DescriptorSetLayoutBinding, DescriptorSetLayoutCreateInfo};
-use vulkano::shader::ShaderModule;
 use vulkano::swapchain::{self, Surface, Swapchain, SwapchainCreateInfo, SwapchainPresentInfo};
-use vulkano::sync::future::FenceSignalFuture;
-use vulkano::sync::{self, GpuFuture};
+use vulkano::sync::{GpuFuture, Sharing};
 use vulkano::{Validated, VulkanError};
 
-use winit::event::{Event, WindowEvent};
-use winit::event_loop::{ControlFlow, ActiveEventLoop};
-use winit::window::{Window, WindowAttributes, WindowId};
-
-
+use winit::event_loop::ActiveEventLoop;
+use winit::window::Window;
 
 
 pub struct Renderer {
@@ -39,8 +34,8 @@ pub struct Renderer {
 	_device: Arc<Device>,
 	queue: Arc<Queue>,
 	swapchain: Arc<Swapchain>,
-	_swapchain_images: Vec<Arc<Image>>,
-	_swapchain_image_views: Vec<Arc<ImageView>>,
+	swapchain_images: Vec<Arc<Image>>,
+	cs_images: Vec<Arc<Image>>,
 	command_buffer_allocator: Arc<StandardCommandBufferAllocator>,
 	compute_pipeline: Arc<ComputePipeline>,
 	descriptor_sets: Vec<Arc<DescriptorSet>>,
@@ -69,6 +64,11 @@ impl Renderer {
 		};
 
 		let (physical_device, queue_family_index) = select_physical_device(&instance, &surface, &device_extensions);
+		println!(
+			"Using device: {} (type: {:?})",
+			physical_device.properties().device_name,
+			physical_device.properties().device_type
+		);
 
 		let (device, mut queues) = Device::new(
 			physical_device.clone(),
@@ -92,24 +92,22 @@ impl Renderer {
 
 			let dimensions = window.inner_size();
 			let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
+
 			// Find a format that supports storage images and supported by the surface
-			println!("Available formats:");
 			let image_format = physical_device
 				.surface_formats(&surface, Default::default())
 				.unwrap()
 				.iter().find(|(format, color)| {
-					println!("  {:?} {:?}", format, color);
 					(physical_device.format_properties(*format).unwrap()
 						.format_features(ImageTiling::Optimal, Default::default())
-						& FormatFeatures::STORAGE_IMAGE != FormatFeatures::empty())
+						& FormatFeatures::TRANSFER_DST != FormatFeatures::empty())
 					&& *color == vulkano::swapchain::ColorSpace::SrgbNonLinear
 				}
 				)
 				.map(|(format, _)| *format)
 				.expect("no supported format found");
-			// let image_format = Format::R8G8B8A8_UNORM;
 				
-			println!("Selected format: {:?}", image_format);
+			println!("Swapchain image format: {:?}", image_format);
 
 			Swapchain::new(
 				device.clone(),
@@ -118,7 +116,7 @@ impl Renderer {
 					min_image_count: caps.min_image_count,
 					image_format,
 					image_extent: dimensions.into(),
-					image_usage: ImageUsage::STORAGE,
+					image_usage: ImageUsage::TRANSFER_DST,
 					composite_alpha,
 					..Default::default()
 				},
@@ -126,7 +124,36 @@ impl Renderer {
 			.unwrap()
 		};
 
-		let swapchain_image_views: Vec<Arc<ImageView>> = swapchain_images
+		let memory_allocator = Arc::new(StandardMemoryAllocator::new_default(device.clone()));
+		
+		let cs_images: Vec<Arc<Image>> = swapchain_images
+			.iter()
+			.map(|image| {
+				Image::new(
+					memory_allocator.clone(),
+					ImageCreateInfo {
+						image_type: ImageType::Dim2d,
+						format: Format::R8G8B8A8_UNORM,
+						extent: image.extent(),
+						mip_levels: 1,
+						array_layers: 1,
+						samples: SampleCount::Sample1,
+						tiling: ImageTiling::Optimal,
+						usage: ImageUsage::STORAGE | ImageUsage::TRANSFER_SRC,
+						sharing: Sharing::Exclusive,
+						initial_layout: ImageLayout::Undefined,
+						..Default::default()
+					},
+					AllocationCreateInfo {
+						memory_type_filter: MemoryTypeFilter::PREFER_DEVICE,
+						..Default::default()
+					}
+				)
+				.unwrap()
+			})
+			.collect();
+
+		let cs_image_views: Vec<Arc<ImageView>> = cs_images
 			.iter()
 			.map(|image| ImageView::new_default(image.clone()).unwrap())
 			.collect();
@@ -203,13 +230,13 @@ impl Renderer {
 		let descriptor_set_allocator = Arc::new(StandardDescriptorSetAllocator::new(device.clone(), Default::default()));
 
 		let layout = compute_pipeline.layout().set_layouts().get(0).unwrap();
-		let descriptor_sets = (0..swapchain_image_views.len())
+		let descriptor_sets = (0..cs_image_views.len())
 			.enumerate()
 			.map(|(i, _)| {
 				DescriptorSet::new(
 					descriptor_set_allocator.clone(),
 					layout.clone(),
-					[WriteDescriptorSet::image_view(0, swapchain_image_views[i].clone())],
+					[WriteDescriptorSet::image_view(0, cs_image_views[i].clone())],
 					[],
 				)
 				.unwrap()
@@ -223,8 +250,8 @@ impl Renderer {
 			_device: device,
 			queue,
 			swapchain,
-			_swapchain_images: swapchain_images,
-			_swapchain_image_views: swapchain_image_views,
+			swapchain_images,
+			cs_images,
 			command_buffer_allocator,
 			compute_pipeline,
 			descriptor_sets,
@@ -266,6 +293,11 @@ impl Renderer {
 				[self.swapchain.image_extent()[0] / 8, self.swapchain.image_extent()[1] / 8, 1]
 			).unwrap();
 		}
+
+		cmd_buf_builder.copy_image(CopyImageInfo::images(
+			self.cs_images[image_i as usize].clone(),
+			self.swapchain_images[image_i as usize].clone()
+		)).unwrap();
 
 		let command_buffer = cmd_buf_builder.build().unwrap();
 

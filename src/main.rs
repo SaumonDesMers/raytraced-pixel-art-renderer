@@ -48,6 +48,7 @@ impl ApplicationHandler for App {
 				if let Some(renderer) = &mut self.renderer {
 					renderer.draw();
 				}
+				self.window.as_ref().unwrap().request_redraw();
 			}
 			_ => {}
 		}

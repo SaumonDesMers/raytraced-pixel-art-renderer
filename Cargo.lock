@@ -1485,6 +1485,7 @@ dependencies = [
 name = "vulkano_test"
 version = "0.1.0"
 dependencies = [
+ "smallvec",
  "vulkano",
  "vulkano-shaders",
  "winit",
