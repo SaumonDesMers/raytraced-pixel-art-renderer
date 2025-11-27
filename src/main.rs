@@ -44,6 +44,11 @@ impl ApplicationHandler for App {
 			WindowEvent::CloseRequested => {
 				event_loop.exit();
 			}
+			WindowEvent::Resized(_new_size) => {
+				if let Some(renderer) = &mut self.renderer {
+					renderer.recreate_swapchain = true;
+				}
+			}
 			WindowEvent::RedrawRequested => {
 				if let Some(renderer) = &mut self.renderer {
 					renderer.draw();
