@@ -1,0 +1,12 @@
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vulkano = "0.35.2"
+vulkano-shaders = "0.35.0"
+winit = "0.30.12"
+
+[build-dependencies]
+spirv-builder = { git="https://github.com/Rust-GPU/rust-gpu.git", rev="e4a165b" }

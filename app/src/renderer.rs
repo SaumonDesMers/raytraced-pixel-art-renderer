@@ -90,7 +90,7 @@ impl Renderer {
 					queue_family_index,
 					..Default::default()
 				}],
-				enabled_extensions: device_extensions, // new
+				enabled_extensions: device_extensions,
 				..Default::default()
 			},
 		)
@@ -119,8 +119,6 @@ impl Renderer {
 				)
 				.map(|(format, _)| *format)
 				.expect("no supported format found");
-				
-			println!("Swapchain image format: {:?}", image_format);
 
 			Swapchain::new(
 				device.clone(),
@@ -145,6 +143,7 @@ impl Renderer {
 			create_compute_images(&memory_allocator, &swapchain_images);
 
 		// Load compute shader
+		const SHADER: &[u8] = include_bytes!(env!("<shader_crate>.spv"));
 		mod cs {
 			vulkano_shaders::shader! {
 				ty: "compute",
