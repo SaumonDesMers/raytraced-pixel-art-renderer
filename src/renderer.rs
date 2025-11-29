@@ -107,6 +107,13 @@ impl Renderer {
 			let composite_alpha = caps.supported_composite_alpha.into_iter().next().unwrap();
 
 			// Find a format that supports storage images and supported by the surface
+			let image_formats = physical_device
+				.surface_formats(&surface, Default::default())
+				.unwrap();
+			println!("Supported surface formats:");
+			for (format, color_space) in &image_formats {
+				println!("  Format: {:?}, Color Space: {:?}", format, color_space);
+			}
 			let image_format = physical_device
 				.surface_formats(&surface, Default::default())
 				.unwrap()
@@ -115,10 +122,12 @@ impl Renderer {
 						.format_features(ImageTiling::Optimal, Default::default())
 						& FormatFeatures::TRANSFER_DST != FormatFeatures::empty())
 					&& *color == vulkano::swapchain::ColorSpace::SrgbNonLinear
+					&& format.block_size() == 4 // 32-bit formats only
 				}
 				)
 				.map(|(format, _)| *format)
 				.expect("no supported format found");
+			println!("Selected swapchain image format: {:?}", image_format);
 
 			Swapchain::new(
 				device.clone(),
@@ -143,7 +152,6 @@ impl Renderer {
 			create_compute_images(&memory_allocator, &swapchain_images);
 
 		// Load compute shader
-		const SHADER: &[u8] = include_bytes!(env!("<shader_crate>.spv"));
 		mod cs {
 			vulkano_shaders::shader! {
 				ty: "compute",

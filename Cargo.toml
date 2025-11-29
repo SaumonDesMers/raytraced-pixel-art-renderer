@@ -1,6 +1,9 @@
-[workspace]
-resolver = "2"
-members = [
-	"app",
-	"shaders"
-]
+[package]
+name = "app"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+vulkano = "0.35.0"
+vulkano-shaders = "0.35.0"
+winit = "0.30.12"

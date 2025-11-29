@@ -1,7 +1,0 @@
-[package]
-name = "shaders"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-spirv-std = "0.9"
