@@ -4,7 +4,12 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
-bevy = { version = "0.17.2", features = ["dynamic_linking"] }
+bevy = { version = "0.18.1", features = ["dynamic_linking"] }
+bevy_mod_debugdump = "0.15.0"
+# This is not the latest version, it's the one used by bevy.
+# I have to include it here to use it.
+# But I'm forced to use the same version as bevy to avoid conflicts.
+wgpu-types = "27.0.1"
 
 
 # Enable a small amount of optimization in the dev profile.
