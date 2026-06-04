@@ -10,8 +10,8 @@ use bevy::{
         Render, RenderApp, RenderStartup, RenderSystems::{self, PrepareBindGroups}, extract_resource::{ExtractResource, ExtractResourcePlugin}, mesh::{RenderMesh, allocator::{MeshAllocator, allocate_and_free_meshes}}, render_asset::{RenderAssets, prepare_assets}, render_graph::{
             NodeRunError, RenderGraph, RenderGraphContext, RenderLabel, ViewNode, ViewNodeRunner,
         }, render_resource::{
-            AsBindGroup, BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, BufferUsages, CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor, Extent3d, PipelineCache, ShaderStages, StorageTextureAccess, TextureDimension, TextureFormat, TextureUsages, binding_types::texture_storage_2d
-        }, renderer::{RenderContext, RenderDevice}, texture::GpuImage, view::ViewTarget
+            AccelerationStructureFlags, AccelerationStructureUpdateMode, AsBindGroup, BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, BufferUsages, CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor, CreateTlasDescriptor, Extent3d, PipelineCache, ShaderStages, StorageTextureAccess, TextureDimension, TextureFormat, TextureUsages, TlasInstance, binding_types::{acceleration_structure, texture_storage_2d}
+        }, renderer::{RenderContext, RenderDevice, RenderQueue}, sync_world::SyncToRenderWorld, texture::GpuImage, view::ViewTarget
     },
     shader::ShaderRef,
     sprite_render::{Material2d, Material2dPlugin},
@@ -19,10 +19,12 @@ use bevy::{
 
 mod blas;
 use blas::BlasManager;
+use wgpu_types::CommandEncoderDescriptor;
 
 use crate::render::blas::{compact_raytracing_blas, extract_raytracing_scene, prepare_raytracing_blas};
 
 #[derive(Component, Clone)]
+#[require(Transform, SyncToRenderWorld)]
 pub struct RaytracingMesh3d(pub Handle<Mesh>);
 
 pub struct PixelArtRendererPlugin;
@@ -44,9 +46,6 @@ impl Plugin for PixelArtRendererPlugin {
             ));
 
         let render_app = app.sub_app_mut(RenderApp);
-		let render_device = render_app.world().resource::<RenderDevice>();
-        let features = render_device.features();
-		println!("Device features: {features:#?}");
 
         render_app
             .add_systems(RenderStartup, init_pipeline)
@@ -68,7 +67,6 @@ impl Plugin for PixelArtRendererPlugin {
 
 		render_app
             .init_resource::<BlasManager>()
-            // .init_resource::<StandardMaterialAssets>()
             .add_systems(ExtractSchedule, extract_raytracing_scene)
             .add_systems(
                 Render,
@@ -185,6 +183,12 @@ struct RaytracingBindGroups {
     raytracing: BindGroup,
 }
 
+fn tlas_transform(transform: &Mat4) -> [f32; 12] {
+    transform.transpose().to_cols_array()[..12]
+        .try_into()
+        .unwrap()
+}
+
 fn prepare_bind_groups(
     mut commands: Commands,
     pipeline: Res<RaytracingPipeline>,
@@ -192,13 +196,54 @@ fn prepare_bind_groups(
     pixel_art_images: Res<PixelArtRendererImages>,
     render_device: Res<RenderDevice>,
     pipeline_cache: Res<PipelineCache>,
+	instances_query: Query<(
+        Entity,
+        &RaytracingMesh3d,
+        &GlobalTransform,
+    )>,
+	blas_manager: Res<BlasManager>,
+	render_queue: Res<RenderQueue>,
 ) {
     let color_view = gpu_images.get(&pixel_art_images.color[0]).unwrap();
+
+	
+	let mut tlas = render_device
+        .wgpu_device()
+        .create_tlas(&CreateTlasDescriptor {
+            label: Some("tlas"),
+            flags: AccelerationStructureFlags::PREFER_FAST_TRACE,
+            update_mode: AccelerationStructureUpdateMode::Build,
+            max_instances: instances_query.iter().len() as u32,
+        });
+	
+	let mut instance_id = 0;
+	for (_entity, RaytracingMesh3d(mesh_handle), transform) in instances_query.iter() {
+		let Some(blas) = blas_manager.get(&mesh_handle.id()) else {
+			continue;
+		};
+
+		let transform = transform.to_matrix();
+        *tlas.get_mut_single(instance_id).unwrap() = Some(TlasInstance::new(
+            blas,
+            tlas_transform(&transform),
+            Default::default(),
+            0xFF,
+        ));
+
+		instance_id += 1;
+	}
+
+	let mut command_encoder = render_device.create_command_encoder(&CommandEncoderDescriptor {
+        label: Some("build_tlas_command_encoder"),
+    });
+    command_encoder.build_acceleration_structures(&[], [&tlas]);
+    render_queue.submit([command_encoder.finish()]);
+
 
     let bind_group = render_device.create_bind_group(
         None,
         &pipeline_cache.get_bind_group_layout(&pipeline.bind_group_layout),
-        &BindGroupEntries::sequential((&color_view.texture_view,)),
+        &BindGroupEntries::sequential((&color_view.texture_view, tlas.as_binding())),
     );
     commands.insert_resource(RaytracingBindGroups {
         raytracing: bind_group,
@@ -220,10 +265,13 @@ fn init_pipeline(
         "RaytracingImages",
         &BindGroupLayoutEntries::sequential(
             ShaderStages::COMPUTE,
-            (texture_storage_2d(
-                TextureFormat::Rgba8Unorm,
-                StorageTextureAccess::WriteOnly,
-            ),),
+            (
+				texture_storage_2d(
+					TextureFormat::Rgba8Unorm,
+					StorageTextureAccess::WriteOnly,
+				),
+				acceleration_structure(),
+			),
         ),
     );
 

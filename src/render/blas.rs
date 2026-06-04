@@ -4,7 +4,7 @@ use bevy::{
     asset::AssetId, ecs::{
         resource::Resource,
         system::{Commands, Query, Res, ResMut},
-    }, mesh::{Indices, Mesh}, platform::collections::HashMap, render::{
+    }, log::info, mesh::{Indices, Mesh}, platform::collections::HashMap, render::{
         Extract, mesh::{
             RenderMesh,
             allocator::{MeshAllocator, MeshBufferSlice},
@@ -20,7 +20,7 @@ const MAX_COMPACTION_VERTICES_PER_FRAME: u32 = 400_000;
 
 #[derive(Resource, Default)]
 pub struct BlasManager {
-    blas: HashMap<AssetId<Mesh>, Blas>,
+    pub blas: HashMap<AssetId<Mesh>, Blas>,
     compaction_queue: VecDeque<(AssetId<Mesh>, u32, bool)>,
 }
 
@@ -191,8 +191,7 @@ fn is_mesh_raytracing_compatible(mesh: &Mesh) -> bool {
         Mesh::ATTRIBUTE_POSITION.id,
         Mesh::ATTRIBUTE_NORMAL.id,
         Mesh::ATTRIBUTE_UV_0.id,
-        Mesh::ATTRIBUTE_TANGENT.id,
     ]);
     let indexed_32 = matches!(mesh.indices(), Some(Indices::U32(..)));
-    mesh.enable_raytracing && triangle_list && vertex_attributes && indexed_32
+    triangle_list && vertex_attributes && indexed_32
 }
