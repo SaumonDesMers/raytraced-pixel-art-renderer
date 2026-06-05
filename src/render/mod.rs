@@ -1,7 +1,7 @@
 use std::borrow::Cow;
 
 use bevy::{
-    asset::RenderAssetUsages,
+    asset::{RenderAssetUsages, load_embedded_asset},
     core_pipeline::core_2d::graph::{Core2d, Node2d::StartMainPass},
     image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     mesh::PrimitiveTopology,
@@ -13,7 +13,7 @@ use bevy::{
             AccelerationStructureFlags, AccelerationStructureUpdateMode, AsBindGroup, BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, BufferUsages, CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor, CreateTlasDescriptor, Extent3d, PipelineCache, ShaderStages, StorageTextureAccess, TextureDimension, TextureFormat, TextureUsages, TlasInstance, binding_types::{acceleration_structure, texture_storage_2d}
         }, renderer::{RenderContext, RenderDevice, RenderQueue}, sync_world::SyncToRenderWorld, texture::GpuImage, view::ViewTarget
     },
-    shader::ShaderRef,
+    shader::{ShaderRef, load_shader_library},
     sprite_render::{Material2d, Material2dPlugin},
 };
 

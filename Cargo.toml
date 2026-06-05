@@ -6,7 +6,6 @@ edition = "2024"
 [dependencies]
 bevy = { version = "0.18.1", features = ["dynamic_linking"] }
 bevy_mod_debugdump = "0.15.0"
-bevy_solari = "0.18.1"
 # This is not the latest version, it's the one used by bevy.
 # I have to include it here to use it.
 # But I'm forced to use the same version as bevy to avoid conflicts.

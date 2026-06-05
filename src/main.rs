@@ -1,5 +1,4 @@
 use bevy::{asset::RenderAssetUsages, mesh::Indices, prelude::*, render::{RenderPlugin, settings::{RenderCreation, WgpuFeatures, WgpuSettings}}};
-use bevy_solari::SolariPlugins;
 use wgpu_types::{FeaturesWGPU, PrimitiveTopology};
 
 mod render;
@@ -21,7 +20,6 @@ fn main() {
 				}),
             bevy_mod_debugdump::CommandLineArgs,
             PixelArtRendererPlugin,
-			SolariPlugins,
         ))
 		.add_systems(Startup, setup)
         .run();
