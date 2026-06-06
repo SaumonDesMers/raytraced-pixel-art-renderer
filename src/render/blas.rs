@@ -5,10 +5,15 @@ use bevy::{
         resource::Resource,
         system::{Commands, Query, Res, ResMut},
     }, log::info, mesh::{Indices, Mesh}, platform::collections::HashMap, render::{
-        Extract, mesh::{
+        Extract,
+        mesh::{
             RenderMesh,
             allocator::{MeshAllocator, MeshBufferSlice},
-        }, render_asset::ExtractedAssets, render_resource::*, renderer::{RenderDevice, RenderQueue}, sync_world::RenderEntity
+        },
+        render_asset::ExtractedAssets,
+        render_resource::*,
+        renderer::{RenderDevice, RenderQueue},
+        sync_world::RenderEntity,
     }, transform::components::GlobalTransform
 };
 
@@ -31,13 +36,7 @@ impl BlasManager {
 }
 
 pub fn extract_raytracing_scene(
-    instances: Extract<
-        Query<(
-            RenderEntity,
-            &RaytracingMesh3d,
-            &GlobalTransform,
-        )>,
-    >,
+    instances: Extract<Query<(RenderEntity, &RaytracingMesh3d, &GlobalTransform)>>,
     mut commands: Commands,
 ) {
     for (render_entity, mesh, transform) in &instances {
@@ -144,6 +143,8 @@ pub fn compact_raytracing_blas(
         if blas.ready_for_compaction() {
             let compacted_blas = render_queue.compact_blas(blas);
             blas_manager.blas.insert(mesh, compacted_blas);
+			
+			info!("Compacting BLAS for mesh {:?} ({} vertices)", mesh, vertex_count);
 
             vertices_compacted += vertex_count;
             continue;
@@ -193,5 +194,5 @@ fn is_mesh_raytracing_compatible(mesh: &Mesh) -> bool {
         Mesh::ATTRIBUTE_UV_0.id,
     ]);
     let indexed_32 = matches!(mesh.indices(), Some(Indices::U32(..)));
-    triangle_list && vertex_attributes && indexed_32
+    mesh.enable_raytracing && triangle_list && vertex_attributes && indexed_32
 }

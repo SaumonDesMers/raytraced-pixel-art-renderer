@@ -1,19 +1,37 @@
 use std::borrow::Cow;
 
 use bevy::{
-    asset::{RenderAssetUsages, load_embedded_asset},
+    asset::RenderAssetUsages,
     core_pipeline::core_2d::graph::{Core2d, Node2d::StartMainPass},
     image::{ImageAddressMode, ImageFilterMode, ImageSampler, ImageSamplerDescriptor},
     mesh::PrimitiveTopology,
     prelude::*,
     render::{
-        Render, RenderApp, RenderStartup, RenderSystems::{self, PrepareBindGroups}, extract_resource::{ExtractResource, ExtractResourcePlugin}, mesh::{RenderMesh, allocator::{MeshAllocator, allocate_and_free_meshes}}, render_asset::{RenderAssets, prepare_assets}, render_graph::{
+        Render, RenderApp, RenderStartup,
+        RenderSystems::{self, PrepareBindGroups},
+        extract_resource::{ExtractResource, ExtractResourcePlugin},
+        mesh::{
+            RenderMesh,
+            allocator::{MeshAllocator, allocate_and_free_meshes},
+        },
+        render_asset::{RenderAssets, prepare_assets},
+        render_graph::{
             NodeRunError, RenderGraph, RenderGraphContext, RenderLabel, ViewNode, ViewNodeRunner,
-        }, render_resource::{
-            AccelerationStructureFlags, AccelerationStructureUpdateMode, AsBindGroup, BindGroup, BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, BufferUsages, CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor, CreateTlasDescriptor, Extent3d, PipelineCache, ShaderStages, StorageTextureAccess, TextureDimension, TextureFormat, TextureUsages, TlasInstance, binding_types::{acceleration_structure, texture_storage_2d}
-        }, renderer::{RenderContext, RenderDevice, RenderQueue}, sync_world::SyncToRenderWorld, texture::GpuImage, view::ViewTarget
+        },
+        render_resource::{
+            AccelerationStructureFlags, AccelerationStructureUpdateMode, AsBindGroup, BindGroup,
+            BindGroupEntries, BindGroupLayoutDescriptor, BindGroupLayoutEntries, BufferUsages,
+            CachedComputePipelineId, ComputePassDescriptor, ComputePipelineDescriptor,
+            CreateTlasDescriptor, Extent3d, PipelineCache, ShaderStages, StorageTextureAccess,
+            TextureDimension, TextureFormat, TextureUsages, TlasInstance,
+            binding_types::{acceleration_structure, texture_storage_2d},
+        },
+        renderer::{RenderContext, RenderDevice, RenderQueue},
+        sync_world::SyncToRenderWorld,
+        texture::GpuImage,
+        view::ViewTarget,
     },
-    shader::{ShaderRef, load_shader_library},
+    shader::ShaderRef,
     sprite_render::{Material2d, Material2dPlugin},
 };
 
@@ -21,7 +39,9 @@ mod blas;
 use blas::BlasManager;
 use wgpu_types::CommandEncoderDescriptor;
 
-use crate::render::blas::{compact_raytracing_blas, extract_raytracing_scene, prepare_raytracing_blas};
+use crate::render::blas::{
+    compact_raytracing_blas, extract_raytracing_scene, prepare_raytracing_blas,
+};
 
 #[derive(Component, Clone)]
 #[require(Transform, SyncToRenderWorld)]
@@ -33,9 +53,7 @@ pub struct PixelArtRendererPlugin;
 struct PixelArtRendererLabel;
 
 impl Plugin for PixelArtRendererPlugin {
-	fn build(&self, _app: &mut App) {
-
-	}
+    fn build(&self, _app: &mut App) {}
 
     fn finish(&self, app: &mut App) {
         app.add_systems(Startup, setup)
@@ -60,12 +78,12 @@ impl Plugin for PixelArtRendererPlugin {
         sub_graph.add_node(PixelArtRendererLabel, view_node_runner);
         sub_graph.add_node_edge(PixelArtRendererLabel, StartMainPass);
 
-		render_app
+        render_app
             .world_mut()
             .resource_mut::<MeshAllocator>()
             .extra_buffer_usages |= BufferUsages::BLAS_INPUT | BufferUsages::STORAGE;
 
-		render_app
+        render_app
             .init_resource::<BlasManager>()
             .add_systems(ExtractSchedule, extract_raytracing_scene)
             .add_systems(
@@ -196,18 +214,13 @@ fn prepare_bind_groups(
     pixel_art_images: Res<PixelArtRendererImages>,
     render_device: Res<RenderDevice>,
     pipeline_cache: Res<PipelineCache>,
-	instances_query: Query<(
-        Entity,
-        &RaytracingMesh3d,
-        &GlobalTransform,
-    )>,
-	blas_manager: Res<BlasManager>,
-	render_queue: Res<RenderQueue>,
+    instances_query: Query<(Entity, &RaytracingMesh3d, &GlobalTransform)>,
+    blas_manager: Res<BlasManager>,
+    render_queue: Res<RenderQueue>,
 ) {
     let color_view = gpu_images.get(&pixel_art_images.color[0]).unwrap();
 
-	
-	let mut tlas = render_device
+    let mut tlas = render_device
         .wgpu_device()
         .create_tlas(&CreateTlasDescriptor {
             label: Some("tlas"),
@@ -215,14 +228,14 @@ fn prepare_bind_groups(
             update_mode: AccelerationStructureUpdateMode::Build,
             max_instances: instances_query.iter().len() as u32,
         });
-	
-	let mut instance_id = 0;
-	for (_entity, RaytracingMesh3d(mesh_handle), transform) in instances_query.iter() {
-		let Some(blas) = blas_manager.get(&mesh_handle.id()) else {
-			continue;
-		};
 
-		let transform = transform.to_matrix();
+    let mut instance_id = 0;
+    for (_entity, RaytracingMesh3d(mesh_handle), transform) in instances_query.iter() {
+        let Some(blas) = blas_manager.get(&mesh_handle.id()) else {
+            continue;
+        };
+
+        let transform = transform.to_matrix();
         *tlas.get_mut_single(instance_id).unwrap() = Some(TlasInstance::new(
             blas,
             tlas_transform(&transform),
@@ -230,15 +243,15 @@ fn prepare_bind_groups(
             0xFF,
         ));
 
-		instance_id += 1;
-	}
+        instance_id += 1;
+    }
+	// info!("Building TLAS with {} instances", instance_id);
 
-	let mut command_encoder = render_device.create_command_encoder(&CommandEncoderDescriptor {
+    let mut command_encoder = render_device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("build_tlas_command_encoder"),
     });
     command_encoder.build_acceleration_structures(&[], [&tlas]);
     render_queue.submit([command_encoder.finish()]);
-
 
     let bind_group = render_device.create_bind_group(
         None,
@@ -266,12 +279,9 @@ fn init_pipeline(
         &BindGroupLayoutEntries::sequential(
             ShaderStages::COMPUTE,
             (
-				texture_storage_2d(
-					TextureFormat::Rgba8Unorm,
-					StorageTextureAccess::WriteOnly,
-				),
-				acceleration_structure(),
-			),
+                texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
+                acceleration_structure(),
+            ),
         ),
     );
 
