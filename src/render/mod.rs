@@ -57,7 +57,6 @@ impl Plugin for PixelArtRendererPlugin {
 
     fn finish(&self, app: &mut App) {
         app.add_systems(Startup, setup)
-            // .add_systems(Update, resize_images)
             .add_plugins((
                 ExtractResourcePlugin::<PixelArtRendererImages>::default(),
                 Material2dPlugin::<Fullscreen>::default(),
@@ -143,14 +142,6 @@ fn fullscreen_mesh(width: f32, height: f32) -> Mesh {
         Mesh::ATTRIBUTE_UV_0,
         vec![[0.0, 0.0], [2.0, 0.0], [0.0, 2.0]],
     )
-    .with_inserted_attribute(
-        Mesh::ATTRIBUTE_COLOR,
-        vec![
-            [0.0, 0.0, 0.0, 1.0],
-            [0.0, 0.0, 0.0, 1.0],
-            [1.0, 0.0, 0.0, 1.0],
-        ],
-    )
 }
 
 #[derive(AsBindGroup, Clone, Asset, TypePath, Default)]
@@ -194,6 +185,42 @@ impl PixelArtRendererImages {
             color: [images.add(color.clone()), images.add(color)],
         }
     }
+}
+
+#[derive(Resource)]
+struct RaytracingPipeline {
+    bind_group_layout: BindGroupLayoutDescriptor,
+    pipeline: CachedComputePipelineId,
+}
+
+fn init_pipeline(
+    mut commands: Commands,
+    asset_server: Res<AssetServer>,
+    pipeline_cache: Res<PipelineCache>,
+) {
+    let bind_group_layout = BindGroupLayoutDescriptor::new(
+        "RaytracingImages",
+        &BindGroupLayoutEntries::sequential(
+            ShaderStages::COMPUTE,
+            (
+                texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
+                acceleration_structure(),
+            ),
+        ),
+    );
+
+    let shader = asset_server.load("shaders/raytracing.wgsl");
+    let pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
+        layout: vec![bind_group_layout.clone()],
+        shader,
+        entry_point: Some(Cow::from("raytrace")),
+        ..default()
+    });
+
+    commands.insert_resource(RaytracingPipeline {
+        bind_group_layout,
+        pipeline,
+    });
 }
 
 #[derive(Resource)]
@@ -245,7 +272,7 @@ fn prepare_bind_groups(
 
         instance_id += 1;
     }
-	// info!("Building TLAS with {} instances", instance_id);
+    // info!("Building TLAS with {} instances", instance_id);
 
     let mut command_encoder = render_device.create_command_encoder(&CommandEncoderDescriptor {
         label: Some("build_tlas_command_encoder"),
@@ -260,42 +287,6 @@ fn prepare_bind_groups(
     );
     commands.insert_resource(RaytracingBindGroups {
         raytracing: bind_group,
-    });
-}
-
-#[derive(Resource)]
-struct RaytracingPipeline {
-    bind_group_layout: BindGroupLayoutDescriptor,
-    pipeline: CachedComputePipelineId,
-}
-
-fn init_pipeline(
-    mut commands: Commands,
-    asset_server: Res<AssetServer>,
-    pipeline_cache: Res<PipelineCache>,
-) {
-    let bind_group_layout = BindGroupLayoutDescriptor::new(
-        "RaytracingImages",
-        &BindGroupLayoutEntries::sequential(
-            ShaderStages::COMPUTE,
-            (
-                texture_storage_2d(TextureFormat::Rgba8Unorm, StorageTextureAccess::WriteOnly),
-                acceleration_structure(),
-            ),
-        ),
-    );
-
-    let shader = asset_server.load("shaders/raytracing.wgsl");
-    let pipeline = pipeline_cache.queue_compute_pipeline(ComputePipelineDescriptor {
-        layout: vec![bind_group_layout.clone()],
-        shader,
-        entry_point: Some(Cow::from("raytrace")),
-        ..default()
-    });
-
-    commands.insert_resource(RaytracingPipeline {
-        bind_group_layout,
-        pipeline,
     });
 }
 

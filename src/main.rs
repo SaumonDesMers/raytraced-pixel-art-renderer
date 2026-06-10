@@ -53,9 +53,9 @@ fn setup(mut commands: Commands, mut meshes: ResMut<Assets<Mesh>>) {
 
     mesh.insert_indices(Indices::U32(vec![0, 1, 2]));
 
-	mesh.enable_raytracing = true;
+    mesh.enable_raytracing = true;
 
-	let mesh_handle = meshes.add(mesh);
+    let mesh_handle = meshes.add(mesh);
     commands.spawn((
         RaytracingMesh3d(mesh_handle.clone()),
         Transform::from_xyz(0.0, 0.0, 0.0),

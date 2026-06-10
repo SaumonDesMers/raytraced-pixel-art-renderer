@@ -1,10 +1,15 @@
 use std::collections::VecDeque;
 
 use bevy::{
-    asset::AssetId, ecs::{
+    asset::AssetId,
+    ecs::{
         resource::Resource,
         system::{Commands, Query, Res, ResMut},
-    }, log::info, mesh::{Indices, Mesh}, platform::collections::HashMap, render::{
+    },
+    log::info,
+    mesh::{Indices, Mesh},
+    platform::collections::HashMap,
+    render::{
         Extract,
         mesh::{
             RenderMesh,
@@ -14,7 +19,8 @@ use bevy::{
         render_resource::*,
         renderer::{RenderDevice, RenderQueue},
         sync_world::RenderEntity,
-    }, transform::components::GlobalTransform
+    },
+    transform::components::GlobalTransform,
 };
 
 use crate::render::RaytracingMesh3d;
@@ -143,8 +149,11 @@ pub fn compact_raytracing_blas(
         if blas.ready_for_compaction() {
             let compacted_blas = render_queue.compact_blas(blas);
             blas_manager.blas.insert(mesh, compacted_blas);
-			
-			info!("Compacting BLAS for mesh {:?} ({} vertices)", mesh, vertex_count);
+
+            info!(
+                "Compacting BLAS for mesh {:?} ({} vertices)",
+                mesh, vertex_count
+            );
 
             vertices_compacted += vertex_count;
             continue;
