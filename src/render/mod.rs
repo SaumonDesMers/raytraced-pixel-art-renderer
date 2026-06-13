@@ -73,9 +73,9 @@ impl Plugin for PixelArtRendererPlugin {
 
         let mut render_graph = render_app.world_mut().resource_mut::<RenderGraph>();
 
-        let sub_graph = render_graph.sub_graph_mut(Core2d);
-        sub_graph.add_node(PixelArtRendererLabel, view_node_runner);
-        sub_graph.add_node_edge(PixelArtRendererLabel, StartMainPass);
+        let core2d_sub_graph = render_graph.sub_graph_mut(Core2d);
+        core2d_sub_graph.add_node(PixelArtRendererLabel, view_node_runner);
+        core2d_sub_graph.add_node_edge(PixelArtRendererLabel, StartMainPass);
 
         render_app
             .world_mut()

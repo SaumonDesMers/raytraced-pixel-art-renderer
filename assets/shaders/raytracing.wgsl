@@ -13,9 +13,9 @@ fn raytrace(
 	var color = vec4(0.0, 0.0, 0.0, 1.0);
 
 	let ray_origin = vec3<f32>(0.0, 0.0, 2.0);
-	let ray_direction = pixel_world_position(coord.xy, size);
+	let ray_direction = ray_direction(coord.xy, size);
 
-	{
+	{ // Hardware raytracing
 		let ray = RayDesc(0, 0xFF, 0.01, 100.0, ray_origin, ray_direction);
 		var ray_query: ray_query;
 		rayQueryInitialize(&ray_query, tlas, ray);
@@ -26,7 +26,7 @@ fn raytrace(
 			color.r = 1.0;
 		}
 	}
-	{
+	{ // Software raytracing
 		let ray = Ray(ray_origin, ray_direction, 0.01, 100.0);
 		let v0 = vec3<f32>(0.0, 1.0, 0.0);
 		let v1 = vec3<f32>(1.0, -1.0, 0.0);
@@ -41,7 +41,7 @@ fn raytrace(
 	textureStore(color_tex, coord.xy, color);
 }
 
-fn pixel_world_position(coord: vec2<u32>, size: vec2<u32>) -> vec3<f32> {
+fn ray_direction(coord: vec2<u32>, size: vec2<u32>) -> vec3<f32> {
 	let ndc = vec2<f32>(
 		(f32(coord.x) + 0.5) / f32(size.x) * 2.0 - 1.0,
 		1.0 - (f32(coord.y) + 0.5) / f32(size.y) * 2.0
